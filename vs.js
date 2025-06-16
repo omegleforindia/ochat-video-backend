@@ -1,13 +1,10 @@
 const express = require("express");
 const http = require("http");
-const { setupVideoServer } = require("./video");
-
 const app = express();
 const server = http.createServer(app);
-
-setupVideoServer(server);
+require("./video")(server); // Signal logic
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(Video server running on port ${PORT});
+  console.log("Server running on port", PORT);
 });
