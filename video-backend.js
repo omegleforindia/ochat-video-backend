@@ -1,69 +1,69 @@
-const { Server } = require("socket.io");
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+const { Server } = require('socket.io');
 
-module.exports = function (server) {
-  const io = new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
+const app = express();
+app.use(cors());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+let waitingUser = null;
+
+io.on('connection', (socket) => {
+  console.log(User connected: ${socket.id});
+
+  if (waitingUser) {
+    socket.partner = waitingUser;
+    waitingUser.partner = socket;
+
+    waitingUser.emit('match', socket.id);
+    socket.emit('match', waitingUser.id);
+
+    waitingUser = null;
+  } else {
+    waitingUser = socket;
+  }
+
+  socket.on('offer', (data) => {
+    if (socket.partner) {
+      socket.partner.emit('offer', data);
     }
   });
 
-  const waitingUsers = [];
-
-  io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
-
-    socket.on("joinRoom", () => {
-      if (waitingUsers.length > 0) {
-        const partner = waitingUsers.pop();
-
-        socket.partner = partner;
-        partner.partner = socket;
-
-        socket.emit("match", true);  // this user creates offer
-        partner.emit("match", false); // this user waits for offer
-      } else {
-        waitingUsers.push(socket);
-      }
-    });
-
-    socket.on("offer", (offer) => {
-      if (socket.partner) {
-        socket.partner.emit("offer", offer);
-      }
-    });
-
-    socket.on("answer", (answer) => {
-      if (socket.partner) {
-        socket.partner.emit("answer", answer);
-      }
-    });
-
-    socket.on("ice-candidate", (candidate) => {
-      if (socket.partner) {
-        socket.partner.emit("ice-candidate", candidate);
-      }
-    });
-
-    socket.on("next", () => {
-      if (socket.partner) {
-        socket.partner.emit("next");
-        socket.partner.partner = null;
-      }
-      socket.partner = null;
-      waitingUsers.push(socket);
-    });
-
-    socket.on("disconnect", () => {
-      if (socket.partner) {
-        socket.partner.emit("next");
-        socket.partner.partner = null;
-      }
-
-      const index = waitingUsers.indexOf(socket);
-      if (index !== -1) {
-        waitingUsers.splice(index, 1);
-      }
-    });
+  socket.on('answer', (data) => {
+    if (socket.partner) {
+      socket.partner.emit('answer', data);
+    }
   });
-};
+
+  socket.on('ice-candidate', (data) => {
+    if (socket.partner) {
+      socket.partner.emit('ice-candidate', data);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.partner) {
+      socket.partner.partner = null;
+      socket.partner.emit('leave');
+    }
+
+    if (waitingUser === socket) {
+      waitingUser = null;
+    }
+
+    console.log(User disconnected: ${socket.id});
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(Server running on port ${PORT});
+});
